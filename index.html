@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laya &amp; Lagsik — Gentle Wellness Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            script: ['"Fredoka"', 'cursive', 'sans-serif'],
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            warmcream: '#FFFDF7',
+            sand: '#F5EFE6',
+            malachite: '#15484C',
+            deepmalachite: '#0E3336',
+            coral: '#FF7A59',
+            marigold: '#FFA20C',
+            lagoon: '#30B8B2',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @keyframes beatPulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 122, 89, 0.35);
+      }
+      50% {
+        transform: scale(1.12);
+        box-shadow: 0 0 0 12px rgba(255, 122, 89, 0);
+      }
+    }
+
+    @keyframes floatSoft {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-3px); }
+    }
+
+    .beat-active {
+      animation: beatPulse var(--beat-duration, 0.6s) ease-in-out infinite;
+    }
+
+    .float-cute {
+      animation: floatSoft 3s ease-in-out infinite;
+    }
+
+    .btn-tactile {
+      transition: transform 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
+    }
+
+    .btn-tactile:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+
+    .progress-ring-circle {
+      transition: stroke-dashoffset 0.35s ease;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-warmcream text-malachite font-sans antialiased selection:bg-marigold/25 selection:text-malachite">
+  <div id="app" class="min-h-screen flex flex-col"></div>
+
+  <script>
+    // =========================================================================
+    // 1. CONFIGURATION & CONSTANTS
+    // =========================================================================
+    const STORAGE_KEY = 'laya_lagsik_prototype_v1';
+    const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const HABIT_ROWS = [
+      { key: 'fast', label: 'Rest / Fast', emoji: '🌙' },
+      { key: 'plate', label: 'Balanced Plate', emoji: '🥗' },
+      { key: 'steps', label: '10k+ Steps', emoji: '👟' },
+      { key: 'water', label: '8 Waters', emoji: '💧' },
+    ];
+
+    const PORTION_CARDS = [
+      {
+        key: 'protein',
+        title: 'Protein',
+        guide: 'Palm size',
+        emoji: '🍗',
+        badgeClass: 'bg-coral/15 text-coral border-coral/30',
+        note: 'Keeps you full & supports recovery',
+      },
+      {
+        key: 'veggies',
+        title: 'Veggies',
+        guide: 'Fist size',
+        emoji: '🥬',
+        badgeClass: 'bg-lagoon/15 text-lagoon border-lagoon/30',
+        note: 'Fresh fiber, crunch & vitamins',
+      },
+      {
+        key: 'carbs',
+        title: 'Carbs',
+        guide: 'Cupped hand',
+        emoji: '🍚',
+        badgeClass: 'bg-marigold/20 text-malachite border-marigold/40',
+        note: 'Steady energy for walks & focus',
+      },
+      {
+        key: 'fats',
+        title: 'Healthy Fats',
+        guide: 'Thumb size',
+        emoji: '🥑',
+        badgeClass: 'bg-malachite/15 text-malachite border-malachite/30',
+        note: 'Smooth satisfaction & nutrients',
+      },
+    ];
+
+    // Steps per minute (spm) and visual beat period in seconds for each pace mode
+    const PACE_CONFIG = {
+      still: {
+        label: 'Standing Still',
+        emoji: '🧍',
+        spm: 0,
+        beatSec: 1.2,
+        hint: '0 spm — ready to get into position before pressing Start.',
+      },
+      slow: {
+        label: 'Slow Walk',
+        emoji: '🌿',
+        spm: 80,
+        beatSec: 0.75,
+        hint: '~80 spm — relaxed, easy-going stroll.',
+      },
+      medium: {
+        label: 'Medium Walk',
+        emoji: '🧭',
+        spm: 105,
+        beatSec: 0.57,
+        hint: '~105 spm — steady, lively everyday walk.',
+      },
+      fast: {
+        label: 'Fast / Brisk',
+        emoji: '⚡',
+        spm: 125,
+        beatSec: 0.48,
+        hint: '~125 spm — purposeful brisk stride!',
+      },
+      jogging: {
+        label: 'Jogging',
+        emoji: '🏃',
+        spm: 160,
+        beatSec: 0.375,
+        hint: '~160 spm — bouncy jog! Match the beat once started.',
+      },
+    };
+
+    const CUTE_MOODS = [
+      { id: 'glowing', emoji: '✨', label: 'Glowing' },
+      { id: 'cozy', emoji: '🌷', label: 'Cozy' },
+      { id: 'sweet', emoji: '🍓', label: 'Sweet & Chill' },
+      { id: 'sleepy', emoji: '💤', label: 'Sleepy' },
+    ];
+
+    function getTodayDayIndex() {
+      // Convert JS Sunday (0) .. Saturday (6) into Monday (0) .. Sunday (6)
+      const jsDay = new Date().getDay();
+      return jsDay === 0 ? 6 : jsDay - 1;
+    }
+
+    function formatClockTime(dateObj = new Date()) {
+      try {
+        return dateObj.toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+      } catch (err) {
+        return '12:00 PM';
+      }
+    }
+
+    function formatElapsedHMS(totalSeconds) {
+      const safe = Math.max(0, Math.floor(totalSeconds));
+      const hrs = Math.floor(safe / 3600);
+      const mins = Math.floor((safe % 3600) / 60);
+      const secs = safe % 60;
+      return [hrs, mins, secs].map((v) => String(v).padStart(2, '0')).join(':');
+    }
+
+    function formatElapsedMMSS(totalSeconds) {
+      const safe = Math.max(0, Math.floor(totalSeconds));
+      const mins = Math.floor(safe / 60);
+      const secs = safe % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function createDefaultJourneyGrid() {
+      const grid = {};
+      HABIT_ROWS.forEach((row) => {
+        grid[row.key] = [false, false, false, false, false, false, false];
+      });
+      return grid;
+    }
+
+    function defaultState() {
+      const todayIdx = getTodayDayIndex();
+      return {
+        viewMode: 'mobile', // 'mobile' | 'desktop'
+        themeMode: 'sunny', // 'sunny' | 'cozy'
+        activeTab: 'steps', // 'timer' | 'plate' | 'steps' | 'journey'
+        mood: 'glowing',
+        timer: {
+          running: false,
+          elapsedSeconds: 0,
+          startedEatingAt: null,
+          stoppedFastingAt: null,
+          mealsToday: 2, // Sustainable 2-3 balanced meals default
+        },
+        plate: {
+          portions: {
+            protein: 1,
+            veggies: 1,
+            carbs: 1,
+            fats: 1,
+          },
+          waters: 4, // out of 8
+        },
+        steps: {
+          goal: 10000, // 10,000 minimum step goal
+          customGoalInput: '12000',
+          dailySteps: 0,
+          pace: 'medium', // Selected mode; does NOT auto-start until Start Session is clicked
+          sessionActive: false,
+          sessionSteps: 0,
+          sessionSeconds: 0,
+          beatOn: false,
+          sessions: [],
+        },
+        journey: {
+          selectedDayIndex: todayIdx,
+          habits: createDefaultJourneyGrid(),
+        },
+      };
+    }
+
+    // =========================================================================
+    // 2. STATE MANAGEMENT & PERSISTENCE
+    // =========================================================================
+    let state = loadState();
+    let timerIntervalId = null;
+    let stepMetronomeIntervalId = null;
+    let stepSubTickAccumulator = 0;
+    let toastTimeoutId = null;
+    let toastMessage = null;
+
+    function loadState() {
+      const fallback = defaultState();
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+
+        const merged = {
+          ...fallback,
+          ...parsed,
+          timer: {
+            ...fallback.timer,
+            ...(parsed.timer || {}),
+            // Always pause live interval on fresh page load so user starts intentionally
+            running: false,
+          },
+          plate: {
+            ...fallback.plate,
+            ...(parsed.plate || {}),
+            portions: {
+              ...fallback.plate.portions,
+              ...((parsed.plate && parsed.plate.portions) || {}),
+            },
+          },
+          steps: {
+            ...fallback.steps,
+            ...(parsed.steps || {}),
+            goal: Math.max(10000, Number((parsed.steps && parsed.steps.goal) || 10000)),
+            pace: PACE_CONFIG[parsed.steps && parsed.steps.pace] ? parsed.steps.pace : 'medium',
+            sessionActive: false,
+            sessionSteps: 0,
+            sessionSeconds: 0,
+            beatOn: false,
+          },
+          journey: {
+            ...fallback.journey,
+            ...(parsed.journey || {}),
+            habits: {
+              ...createDefaultJourneyGrid(),
+              ...((parsed.journey && parsed.journey.habits) || {}),
+            },
+          },
+        };
+
+        if (typeof merged.journey.selectedDayIndex !== 'number' || merged.journey.selectedDayIndex < 0 || merged.journey.selectedDayIndex > 6) {
+          merged.journey.selectedDayIndex = getTodayDayIndex();
+        }
+        return merged;
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (err) {
+        // Ignore storage quota issues gracefully
+      }
+    }
+
+    function showToast(text, tone = 'cute') {
+      toastMessage = { text, tone };
+      if (toastTimeoutId) clearTimeout(toastTimeoutId);
+      toastTimeoutId = setTimeout(() => {
+        toastMessage = null;
+        renderToastOnly();
+      }, 2800);
+      renderToastOnly();
+    }
+
+    function renderToastOnly() {
+      const slot = document.getElementById('toast-slot');
+      if (!slot) return;
+      if (!toastMessage) {
+        slot.innerHTML = '';
+        return;
+      }
+      const badgeTone =
+        toastMessage.tone === 'warn'
+          ? 'bg-marigold text-malachite border-marigold'
+          : 'bg-malachite text-warmcream border-lagoon/50';
+      slot.innerHTML = `
+        <div class="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full border shadow-xl text-xs sm:text-sm font-bold flex items-center gap-2 max-w-[92vw] text-center ${badgeTone}">
+          <span>${escapeHtml(toastMessage.text)}</span>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function syncTodayHabits() {
+      try {
+        const todayIdx = getTodayDayIndex();
+        const totalPortions =
+          state.plate.portions.protein +
+          state.plate.portions.veggies +
+          state.plate.portions.carbs +
+          state.plate.portions.fats;
+
+        state.journey.habits.plate[todayIdx] = totalPortions >= 3;
+        state.journey.habits.steps[todayIdx] = state.steps.dailySteps >= state.steps.goal;
+        state.journey.habits.water[todayIdx] = state.plate.waters >= 8;
+        if (state.timer.startedEatingAt || state.timer.stoppedFastingAt || state.timer.elapsedSeconds > 0) {
+          state.journey.habits.fast[todayIdx] = true;
+        }
+      } catch (err) {
+        // Keep habit sync safe
+      }
+    }
+
+    // =========================================================================
+    // 3. NAVIGATION, VIEW & THEME ACTIONS
+    // =========================================================================
+    function setActiveTab(tabKey) {
+      state.activeTab = tabKey;
+      saveState();
+      renderApp();
+    }
+
+    function setViewMode(mode) {
+      if (mode !== 'mobile' && mode !== 'desktop') return;
+      state.viewMode = mode;
+      saveState();
+      renderApp();
+    }
+
+    function toggleThemeMode() {
+      state.themeMode = state.themeMode === 'sunny' ? 'cozy' : 'sunny';
+      saveState();
+      renderApp();
+    }
+
+    function setMood(moodId) {
+      state.mood = moodId;
+      saveState();
+      renderApp();
+      const found = CUTE_MOODS.find((m) => m.id === moodId);
+      if (found) {
+        showToast(`Mood set to ${found.emoji} ${found.label}!`, 'cute');
+      }
+    }
+
+    // =========================================================================
+    // 4. TIMER ACTIONS (SIMPLE START EATING / STOP FASTING TIMESTAMPS)
+    // =========================================================================
+    function startEatingTimestamp() {
+      const nowStr = formatClockTime(new Date());
+      state.timer.startedEatingAt = nowStr;
+      state.timer.running = true;
+      syncTodayHabits();
+      saveState();
+      startTimerLoop();
+      renderApp();
+      showToast(`Started eating at ${nowStr}`, 'cute');
+    }
+
+    function stopFastingTimestamp() {
+      const nowStr = formatClockTime(new Date());
+      state.timer.stoppedFastingAt = nowStr;
+      state.timer.running = false;
+      stopTimerLoop();
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast(`Stopped fasting at ${nowStr}`, 'cute');
+    }
+
+    function resetTimerLog() {
+      state.timer.running = false;
+      state.timer.elapsedSeconds = 0;
+      state.timer.startedEatingAt = null;
+      state.timer.stoppedFastingAt = null;
+      stopTimerLoop();
+      saveState();
+      renderApp();
+      showToast('Timer timestamps cleared', 'cute');
+    }
+
+    function stopFastingTimestamp() {
+      const nowStr = formatClockTime(new Date());
+      state.timer.stoppedFastingAt = nowStr;
+      state.timer.running = false;
+      stopTimerLoop();
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast(`Stopped fasting at ${nowStr} 🌷`, 'cute');
+    }
+
+    function resetTimerLog() {
+      state.timer.running = false;
+      state.timer.elapsedSeconds = 0;
+      state.timer.startedEatingAt = null;
+      state.timer.stoppedFastingAt = null;
+      stopTimerLoop();
+      saveState();
+      renderApp();
+      showToast('Timer timestamps cleared ✨', 'cute');
+    }
+
+    function adjustMealsToday(delta) {
+      // Sustainable balanced meals range: 2 to 4 meals/day
+      const next = Math.min(4, Math.max(2, Number(state.timer.mealsToday || 2) + delta));
+      state.timer.mealsToday = next;
+      saveState();
+      renderApp();
+    }
+
+    function startTimerLoop() {
+      stopTimerLoop();
+      timerIntervalId = setInterval(() => {
+        if (!state.timer.running) return;
+        state.timer.elapsedSeconds += 1;
+        saveState();
+        const clockEl = document.getElementById('live-timer-clock');
+        if (clockEl) {
+          clockEl.textContent = formatElapsedHMS(state.timer.elapsedSeconds);
+        }
+      }, 1000);
+    }
+
+    function stopTimerLoop() {
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        timerIntervalId = null;
+      }
+    }
+
+    // =========================================================================
+    // 5. PLATE & WATER ACTIONS
+    // =========================================================================
+    function adjustPortion(key, delta) {
+      if (!Object.prototype.hasOwnProperty.call(state.plate.portions, key)) return;
+      const current = state.plate.portions[key];
+      const next = Math.min(6, Math.max(0, current + delta));
+      state.plate.portions[key] = next;
+      syncTodayHabits();
+      saveState();
+      renderApp();
+    }
+
+    function setWaterDroplets(count) {
+      const safe = Math.min(8, Math.max(0, count));
+      state.plate.waters = safe;
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      if (safe === 8) {
+        showToast('8/8 Hydration droplets complete! Sparkling cute 💧✨', 'cute');
+      }
+    }
+
+    function resetPlateAndWater() {
+      state.plate.portions = { protein: 0, veggies: 0, carbs: 0, fats: 0 };
+      state.plate.waters = 0;
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast('Plate & water reset for a fresh start 🌷', 'cute');
+    }
+
+    // =========================================================================
+    // 6. STEPS ACTIONS (SELECT MODE FIRST -> PRESS START SESSION TO RUN)
+    // =========================================================================
+    function selectStepGoal(goal) {
+      const numeric = Math.max(10000, Number(goal) || 10000);
+      state.steps.goal = numeric;
+      state.steps.customGoalInput = String(numeric);
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast(`Step goal set to ${numeric.toLocaleString()} steps 🎀`, 'cute');
+    }
+
+    function applyCustomStepGoal() {
+      const raw = Number(state.steps.customGoalInput);
+      if (!Number.isFinite(raw) || raw < 10000) {
+        showToast('Minimum step goal is 10,000 steps! ✨', 'warn');
+        state.steps.customGoalInput = String(Math.max(10000, state.steps.goal));
+        renderApp();
+        return;
+      }
+      selectStepGoal(Math.round(raw));
+    }
+
+    // Selecting a pace mode ONLY picks the mode; it does NOT start until Start Session is pressed.
+    function setStepPace(paceKey) {
+      if (!PACE_CONFIG[paceKey]) return;
+      state.steps.pace = paceKey;
+      saveState();
+      if (state.steps.sessionActive) {
+        restartStepMetronomeLoop();
+      }
+      renderApp();
+      const cfg = PACE_CONFIG[paceKey];
+      if (!state.steps.sessionActive) {
+        showToast(`${cfg.emoji} ${cfg.label} selected — press "Start Session" when ready!`, 'cute');
+      } else {
+        showToast(`Switched live pace to ${cfg.emoji} ${cfg.label}`, 'cute');
+      }
+    }
+
+    function startStepSession() {
+      state.steps.sessionActive = true;
+      state.steps.sessionSteps = 0;
+      state.steps.sessionSeconds = 0;
+      state.steps.beatOn = true;
+      stepSubTickAccumulator = 0;
+      saveState();
+      restartStepMetronomeLoop();
+      renderApp();
+      const cfg = PACE_CONFIG[state.steps.pace] || PACE_CONFIG.medium;
+      showToast(`Session started in ${cfg.label} mode! Let's go 🎀✨`, 'cute');
+    }
+
+    function finishStepSession() {
+      if (!state.steps.sessionActive) return;
+      const cfg = PACE_CONFIG[state.steps.pace] || PACE_CONFIG.medium;
+      const recordedSteps = state.steps.sessionSteps;
+      const recordedSecs = state.steps.sessionSeconds;
+
+      state.steps.sessionActive = false;
+      state.steps.beatOn = false;
+      stopStepMetronomeLoop();
+
+      if (recordedSteps > 0 || recordedSecs > 0) {
+        state.steps.sessions.unshift({
+          id: Date.now(),
+          paceLabel: `${cfg.emoji} ${cfg.label}`,
+          steps: recordedSteps,
+          durationSec: recordedSecs,
+          timeStr: formatClockTime(new Date()),
+        });
+        state.steps.sessions = state.steps.sessions.slice(0, 6);
+      }
+
+      state.steps.sessionSteps = 0;
+      state.steps.sessionSeconds = 0;
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast(`Saved ${recordedSteps.toLocaleString()} steps! Super cute work 🌸`, 'cute');
+    }
+
+    function restartStepsCount() {
+      state.steps.sessionActive = false;
+      state.steps.beatOn = false;
+      state.steps.sessionSteps = 0;
+      state.steps.sessionSeconds = 0;
+      state.steps.dailySteps = 0;
+      stepSubTickAccumulator = 0;
+      stopStepMetronomeLoop();
+      syncTodayHabits();
+      saveState();
+      renderApp();
+      showToast('Steps restarted back to 0 🔄✨', 'cute');
+    }
+
+    function addManualSteps(amount) {
+      const inc = Math.max(1, Number(amount) || 1);
+      state.steps.dailySteps += inc;
+      if (state.steps.sessionActive) {
+        state.steps.sessionSteps += inc;
+      }
+      syncTodayHabits();
+      saveState();
+      renderApp();
+    }
+
+    function restartStepMetronomeLoop() {
+      stopStepMetronomeLoop();
+      if (!state.steps.sessionActive) return;
+
+      const cfg = PACE_CONFIG[state.steps.pace] || PACE_CONFIG.medium;
+      const intervalMs = Math.max(250, Math.round(cfg.beatSec * 1000));
+      // Steps added per beat = (spm / 60) * beatSec
+      const stepsPerBeat = cfg.spm > 0 ? (cfg.spm / 60) * cfg.beatSec : 0;
+
+      stepMetronomeIntervalId = setInterval(() => {
+        if (!state.steps.sessionActive) return;
+        state.steps.beatOn = !state.steps.beatOn;
+        state.steps.sessionSeconds += cfg.beatSec;
+
+        if (stepsPerBeat > 0) {
+          stepSubTickAccumulator += stepsPerBeat;
+          const wholeSteps = Math.floor(stepSubTickAccumulator);
+          if (wholeSteps > 0) {
+            stepSubTickAccumulator -= wholeSteps;
+            state.steps.sessionSteps += wholeSteps;
+            state.steps.dailySteps += wholeSteps;
+          }
+        }
+
+        syncTodayHabits();
+        saveState();
+        updateStepsLiveDom();
+      }, intervalMs);
+    }
+
+    function stopStepMetronomeLoop() {
+      if (stepMetronomeIntervalId) {
+        clearInterval(stepMetronomeIntervalId);
+        stepMetronomeIntervalId = null;
+      }
+    }
+
+    function updateStepsLiveDom() {
+      const dailyEl = document.getElementById('live-daily-steps');
+      const sessionStepsEl = document.getElementById('live-session-steps');
+      const sessionTimeEl = document.getElementById('live-session-time');
+      const distEl = document.getElementById('live-distance-km');
+      const beatDotEl = document.getElementById('live-beat-indicator');
+      const ringEl = document.getElementById('steps-progress-ring');
+      const pctEl = document.getElementById('steps-progress-pct');
+
+      if (dailyEl) dailyEl.textContent = state.steps.dailySteps.toLocaleString();
+      if (sessionStepsEl) sessionStepsEl.textContent = state.steps.sessionSteps.toLocaleString();
+      if (sessionTimeEl) sessionTimeEl.textContent = formatElapsedMMSS(state.steps.sessionSeconds);
+      if (distEl) {
+        const km = (state.steps.dailySteps * 0.00075).toFixed(2);
+        distEl.textContent = `${km} km`;
+      }
+      if (beatDotEl) {
+        beatDotEl.classList.toggle('scale-125', Boolean(state.steps.beatOn));
+        beatDotEl.classList.toggle('bg-coral', Boolean(state.steps.beatOn));
+      }
+      if (ringEl && pctEl) {
+        const pct = Math.min(100, Math.round((state.steps.dailySteps / Math.max(1, state.steps.goal)) * 100));
+        const circumference = 2 * Math.PI * 52;
+        const offset = circumference - (pct / 100) * circumference;
+        ringEl.style.strokeDashoffset = String(offset);
+        pctEl.textContent = `${pct}%`;
+      }
+    }
+
+    // =========================================================================
+    // 7. JOURNEY ACTIONS (DAY-LOCKED TO TODAY)
+    // =========================================================================
+    function selectJourneyDay(dayIdx) {
+      if (dayIdx < 0 || dayIdx > 6) return;
+      state.journey.selectedDayIndex = dayIdx;
+      saveState();
+      renderApp();
+    }
+
+    function toggleJourneyHabit(habitKey, dayIdx) {
+      const todayIdx = getTodayDayIndex();
+      if (dayIdx !== todayIdx) {
+        showToast('Past/future days are locked — you can edit Today only 🔒', 'warn');
+        return;
+      }
+      if (!state.journey.habits[habitKey]) return;
+      state.journey.habits[habitKey][dayIdx] = !state.journey.habits[habitKey][dayIdx];
+      saveState();
+      renderApp();
+    }
+
+    function resetWeeklyJourney() {
+      state.journey.habits = createDefaultJourneyGrid();
+      state.journey.selectedDayIndex = getTodayDayIndex();
+      saveState();
+      renderApp();
+      showToast('Weekly habit grid reset for a fresh week 🌸', 'cute');
+    }
+
+    // =========================================================================
+    // 8. SECTION RENDERERS
+    // =========================================================================
+    function getSurfaceClasses() {
+      if (state.themeMode === 'cozy') {
+        return {
+          page: 'bg-deepmalachite text-warmcream',
+          card: 'bg-malachite/90 text-warmcream border-warmcream/15 shadow-lg',
+          subCard: 'bg-deepmalachite/70 text-warmcream border-warmcream/10',
+          muted: 'text-warmcream/75',
+        };
+      }
+      return {
+        page: 'bg-warmcream text-malachite',
+        card: 'bg-white text-malachite border-sand shadow-sm',
+        subCard: 'bg-sand/75 text-malachite border-malachite/10',
+        muted: 'text-malachite/70',
+      };
+    }
+
+    function renderTimerSection(surf) {
+      const t = state.timer;
+      const statusBadge = t.running
+        ? '<span class="px-3 py-1 rounded-full text-xs font-extrabold bg-coral/15 text-coral border border-coral/30">Eating Timer Running</span>'
+        : t.stoppedFastingAt
+          ? '<span class="px-3 py-1 rounded-full text-xs font-extrabold bg-lagoon/15 text-lagoon border border-lagoon/30">Rest / Fast Logged</span>'
+          : '<span class="px-3 py-1 rounded-full text-xs font-extrabold bg-marigold/20 text-malachite border border-marigold/40">Ready When You Are</span>';
+
+      return `
+        <section class="space-y-4">
+          <div class="rounded-3xl border p-5 sm:p-6 ${surf.card}">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h2 class="font-script text-xl sm:text-2xl">Simple Meal &amp; Rest Log</h2>
+                <p class="text-xs sm:text-sm ${surf.muted}">
+                  Record when you start eating and when you stop fasting — no complicated time ranges.
+                </p>
+              </div>
+              ${statusBadge}
+            </div>
+
+            <!-- Live Clock Readout -->
+            <div class="rounded-2xl border p-5 text-center mb-4 ${surf.subCard}">
+              <p class="text-[11px] font-extrabold uppercase tracking-wider ${surf.muted}">
+                ${t.running ? 'Elapsed Since Starting Meal' : 'Current Timer Clock'}
+              </p>
+              <div id="live-timer-clock" class="font-script text-4xl sm:text-5xl mt-1 tracking-tight text-malachite">
+                ${formatElapsedHMS(t.elapsedSeconds)}
+              </div>
+            </div>
+
+            <!-- Recorded Start Eating / Stop Fasting Timestamps -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+              <div class="rounded-2xl border p-4 ${surf.subCard}">
+                <div class="text-xs font-bold ${surf.muted}">Started Eating At</div>
+                <div class="text-lg font-extrabold mt-1">
+                  ${t.startedEatingAt ? escapeHtml(t.startedEatingAt) : 'Not recorded yet'}
+                </div>
+              </div>
+              <div class="rounded-2xl border p-4 ${surf.subCard}">
+                <div class="text-xs font-bold ${surf.muted}">Stopped Fasting At</div>
+                <div class="text-lg font-extrabold mt-1">
+                  ${t.stoppedFastingAt ? escapeHtml(t.stoppedFastingAt) : 'Not recorded yet'}
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                onclick="startEatingTimestamp()"
+                class="btn-tactile py-3 px-4 rounded-2xl bg-malachite text-warmcream font-extrabold text-xs sm:text-sm shadow-md shadow-malachite/20"
+              >
+                Start Eating Now
+              </button>
+              <button
+                onclick="stopFastingTimestamp()"
+                class="btn-tactile py-3 px-4 rounded-2xl bg-lagoon text-white font-extrabold text-xs sm:text-sm shadow-md shadow-lagoon/25"
+              >
+                Stop Fasting Now
+              </button>
+              <button
+                onclick="resetTimerLog()"
+                class="btn-tactile py-3 px-4 rounded-2xl border border-current/20 font-extrabold text-xs sm:text-sm ${surf.subCard}"
+              >
+                Clear Times
+              </button>
+            </div>
+          </div>
+
+          <!-- Sustainable Nourishment Check-In -->
+          <div class="rounded-3xl border p-5 ${surf.card}">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="font-script text-lg">Balanced Meals Today</h3>
+                <p class="text-xs ${surf.muted}">
+                  Steady 2–4 meals keep energy strong for your 10,000+ steps.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  onclick="adjustMealsToday(-1)"
+                  class="btn-tactile w-9 h-9 rounded-xl border border-current/20 font-extrabold text-base flex items-center justify-center ${surf.subCard}"
+                  aria-label="Decrease meals"
+                >−</button>
+                <span class="min-w-[2.5rem] text-center font-extrabold text-lg">${t.mealsToday}</span>
+                <button
+                  onclick="adjustMealsToday(1)"
+                  class="btn-tactile w-9 h-9 rounded-xl bg-marigold text-malachite font-extrabold text-base flex items-center justify-center shadow-sm"
+                  aria-label="Increase meals"
+                >+</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderPlateSection(surf) {
+      const totalPortions =
+        state.plate.portions.protein +
+        state.plate.portions.veggies +
+        state.plate.portions.carbs +
+        state.plate.portions.fats;
+
+      const cardsHtml = PORTION_CARDS.map((item) => {
+        const count = state.plate.portions[item.key] || 0;
+        return `
+          <div class="rounded-2xl border p-4 flex flex-col justify-between gap-3 ${surf.subCard}">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2.5">
+                <span class="text-2xl">${item.emoji}</span>
+                <div>
+                  <h3 class="font-extrabold text-sm sm:text-base leading-tight">${item.title}</h3>
+                  <span class="inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${item.badgeClass}">
+                    ${item.guide}
+                  </span>
+                </div>
+              </div>
+              <span class="font-script text-2xl text-malachite">${count}</span>
+            </div>
+            <p class="text-[11px] ${surf.muted}">${item.note}</p>
+            <div class="flex items-center justify-between gap-2 pt-1">
+              <button
+                onclick="adjustPortion('${item.key}', -1)"
+                class="btn-tactile flex-1 py-2 rounded-xl border border-current/20 font-extrabold text-sm ${surf.card}"
+                aria-label="Remove ${item.title}"
+              >−</button>
+              <button
+                onclick="adjustPortion('${item.key}', 1)"
+                class="btn-tactile flex-1 py-2 rounded-xl bg-marigold text-malachite font-extrabold text-sm shadow-sm"
+                aria-label="Add ${item.title}"
+              >+</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const dropletsHtml = Array.from({ length: 8 }, (_, idx) => {
+        const filled = idx < state.plate.waters;
+        return `
+          <button
+            onclick="setWaterDroplets(${idx + 1 === state.plate.waters ? idx : idx + 1})"
+            class="btn-tactile aspect-square rounded-2xl border flex flex-col items-center justify-center gap-0.5 transition ${
+              filled
+                ? 'bg-lagoon text-white border-lagoon shadow-sm shadow-lagoon/30'
+                : `${surf.subCard} opacity-75 hover:opacity-100`
+            }"
+            aria-label="Water droplet ${idx + 1}"
+          >
+            <span class="text-base sm:text-lg">${filled ? '💧' : '🫧'}</span>
+            <span class="text-[10px] font-extrabold">${idx + 1}</span>
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <section class="space-y-4">
+          <div class="rounded-3xl border p-5 sm:p-6 ${surf.card}">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h2 class="font-script text-xl sm:text-2xl">Hand-Portion Plate</h2>
+                <p class="text-xs sm:text-sm ${surf.muted}">
+                  Tap <span class="font-bold">+</span> or <span class="font-bold">−</span> as you build your plate today (${totalPortions} portions logged).
+                </p>
+              </div>
+              <button
+                onclick="resetPlateAndWater()"
+                class="btn-tactile px-3 py-1.5 rounded-xl border border-current/20 text-xs font-extrabold ${surf.subCard}"
+              >
+                Reset Plate &amp; Water
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${cardsHtml}
+            </div>
+          </div>
+
+          <div class="rounded-3xl border p-5 sm:p-6 ${surf.card}">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 class="font-script text-lg sm:text-xl">Hydration Droplets</h3>
+                <p class="text-xs ${surf.muted}">Tap any droplet to set your glasses/cups of water today.</p>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-lagoon/15 text-lagoon border border-lagoon/30">
+                ${state.plate.waters} / 8 Waters
+              </span>
+            </div>
+            <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">
+              ${dropletsHtml}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderStepsSection(surf) {
+      const s = state.steps;
+      const pct = Math.min(100, Math.round((s.dailySteps / Math.max(1, s.goal)) * 100));
+      const radius = 52;
+      const circumference = 2 * Math.PI * radius;
+      const dashOffset = circumference - (pct / 100) * circumference;
+      const distanceKm = (s.dailySteps * 0.00075).toFixed(2);
+      const selectedPaceCfg = PACE_CONFIG[s.pace] || PACE_CONFIG.medium;
+
+      const goalPresets = [10000, 12500, 15000];
+      const goalButtonsHtml = goalPresets
+        .map((g) => {
+          const active = s.goal === g;
+          return `
+            <button
+              onclick="selectStepGoal(${g})"
+              class="btn-tactile px-3 py-2 rounded-xl text-xs font-extrabold border ${
+                active
+                  ? 'bg-marigold text-malachite border-marigold shadow-sm'
+                  : `${surf.subCard}`
+              }"
+            >
+              ${g.toLocaleString()}
+            </button>
+          `;
+        })
+        .join('');
+
+      const paceButtonsHtml = Object.entries(PACE_CONFIG)
+        .map(([key, cfg]) => {
+          const active = s.pace === key;
+          return `
+            <button
+              onclick="setStepPace('${key}')"
+              class="btn-tactile p-2.5 rounded-2xl border text-left flex flex-col gap-1 ${
+                active
+                  ? 'bg-marigold/20 border-marigold ring-2 ring-marigold/40'
+                  : `${surf.subCard} hover:border-marigold/50`
+              }"
+            >
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-base">${cfg.emoji}</span>
+                ${active ? '<span class="text-[10px] font-extrabold text-malachite">PICKED</span>' : ''}
+              </div>
+              <span class="text-xs font-extrabold leading-tight">${cfg.label}</span>
+              <span class="text-[10px] font-semibold ${surf.muted}">${cfg.spm} spm</span>
+            </button>
+          `;
+        })
+        .join('');
+
+      const sessionsHtml =
+        s.sessions.length === 0
+          ? `<p class="text-xs ${surf.muted} text-center py-3">No finished walk/jog sessions yet — pick a pace and tap Start Session.</p>`
+          : s.sessions
+              .map(
+                (item) => `
+                  <div class="flex items-center justify-between gap-2 rounded-2xl border px-3.5 py-2.5 text-xs ${surf.subCard}">
+                    <div>
+                      <span class="font-extrabold">${escapeHtml(item.paceLabel)}</span>
+                      <span class="ml-1.5 ${surf.muted}">at ${escapeHtml(item.timeStr)}</span>
+                    </div>
+                    <div class="font-extrabold text-lagoon">
+                      +${Number(item.steps).toLocaleString()} steps · ${formatElapsedMMSS(item.durationSec)}
+                    </div>
+                  </div>
+                `
+              )
+              .join('');
+
+      return `
+        <section class="space-y-4">
+          <!-- Daily Progress Ring & 10,000+ Minimum Goal -->
+          <div class="rounded-3xl border p-5 sm:p-6 ${surf.card}">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h2 class="font-script text-xl sm:text-2xl">10,000+ Steps Tracker</h2>
+                <p class="text-xs sm:text-sm ${surf.muted}">
+                  Minimum goal starts at <strong>10,000 steps</strong> for serious brisk walks &amp; jogs.
+                </p>
+              </div>
+              <button
+                onclick="restartStepsCount()"
+                class="btn-tactile px-3 py-1.5 rounded-xl bg-marigold/20 text-malachite border border-marigold/40 text-xs font-extrabold"
+              >
+                Restart Steps
+              </button>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-center gap-5">
+              <div class="relative w-32 h-32 shrink-0 flex items-center justify-center">
+                <svg class="w-32 h-32" viewBox="0 0 120 120">
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="${radius}"
+                    fill="transparent"
+                    stroke="currentColor"
+                    stroke-opacity="0.12"
+                    stroke-width="10"
+                  />
+                  <circle
+                    id="steps-progress-ring"
+                    class="progress-ring-circle"
+                    cx="60"
+                    cy="60"
+                    r="${radius}"
+                    fill="transparent"
+                    stroke="#30B8B2"
+                    stroke-width="10"
+                    stroke-linecap="round"
+                    stroke-dasharray="${circumference}"
+                    stroke-dashoffset="${dashOffset}"
+                  />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span id="steps-progress-pct" class="font-script text-xl text-lagoon">${pct}%</span>
+                  <span class="text-[10px] font-bold ${surf.muted}">of ${s.goal.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div class="flex-1 w-full space-y-3">
+                <div class="grid grid-cols-2 gap-2.5">
+                  <div class="rounded-2xl border p-3 ${surf.subCard}">
+                    <div class="text-[11px] font-bold ${surf.muted}">Today's Steps</div>
+                    <div id="live-daily-steps" class="font-script text-2xl sm:text-3xl text-malachite mt-0.5">
+                      ${s.dailySteps.toLocaleString()}
+                    </div>
+                  </div>
+                  <div class="rounded-2xl border p-3 ${surf.subCard}">
+                    <div class="text-[11px] font-bold ${surf.muted}">Est. Distance</div>
+                    <div id="live-distance-km" class="font-script text-2xl sm:text-3xl text-lagoon mt-0.5">
+                      ${distanceKm} km
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step Goal Presets & Custom Input (>= 10,000) -->
+                <div class="flex flex-wrap items-center gap-2">
+                  ${goalButtonsHtml}
+                  <div class="flex items-center gap-1.5 flex-1 min-w-[140px]">
+                    <input
+                      type="number"
+                      min="10000"
+                      step="500"
+                      value="${escapeHtml(s.customGoalInput)}"
+                      oninput="state.steps.customGoalInput = this.value"
+                      class="w-full px-2.5 py-1.5 rounded-xl border text-xs font-bold bg-transparent border-current/20"
+                      aria-label="Custom step goal minimum 10000"
+                    />
+                    <button
+                      onclick="applyCustomStepGoal()"
+                      class="btn-tactile px-3 py-1.5 rounded-xl bg-malachite text-warmcream text-xs font-extrabold shrink-0"
+                    >
+                      Set
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 1: Pick Mode First (Does NOT Auto-Start) -> Step 2: Start Session -->
+          <div class="rounded-3xl border p-5 sm:p-6 space-y-4 ${surf.card}">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="font-script text-lg sm:text-xl">Live Pace Session</h3>
+                <p class="text-xs ${surf.muted}">
+                  ${selectedPaceCfg.hint}
+                </p>
+              </div>
+              <span
+                class="px-3 py-1 rounded-full text-xs font-extrabold ${
+                  s.sessionActive
+                    ? 'bg-lagoon text-white'
+                    : 'bg-sand text-malachite border border-malachite/15'
+                }"
+              >
+                ${s.sessionActive ? 'Active Session' : 'Standby — Ready to Start'}
+              </span>
+            </div>
+
+            <!-- Live Session Readout -->
+            <div class="grid grid-cols-3 gap-2.5 rounded-2xl border p-3.5 text-center ${surf.subCard}">
+              <div>
+                <div class="text-[10px] font-extrabold uppercase ${surf.muted}">Session Steps</div>
+                <div id="live-session-steps" class="font-script text-xl sm:text-2xl text-malachite mt-0.5">
+                  ${s.sessionSteps.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div class="text-[10px] font-extrabold uppercase ${surf.muted}">Session Time</div>
+                <div id="live-session-time" class="font-script text-xl sm:text-2xl mt-0.5">
+                  ${formatElapsedMMSS(s.sessionSeconds)}
+                </div>
+              </div>
+              <div class="flex flex-col items-center justify-center">
+                <div class="text-[10px] font-extrabold uppercase ${surf.muted}">Beat Pulse</div>
+                <div
+                  id="live-beat-indicator"
+                  style="--beat-duration: ${selectedPaceCfg.beatSec}s;"
+                  class="mt-1.5 w-5 h-5 rounded-full transition-transform ${
+                    s.sessionActive && selectedPaceCfg.spm > 0
+                      ? 'beat-active bg-coral'
+                      : 'bg-malachite/25'
+                  }"
+                ></div>
+              </div>
+            </div>
+
+            <!-- 1. Pick Mode First -->
+            <div class="space-y-1.5">
+              <span class="text-[11px] font-extrabold uppercase tracking-wider ${surf.muted}">
+                1. Choose Your Mode First (Stays Ready Until You Press Start)
+              </span>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                ${paceButtonsHtml}
+              </div>
+            </div>
+
+            <!-- 2. Press Start When Ready -->
+            <div class="space-y-1.5">
+              <span class="text-[11px] font-extrabold uppercase tracking-wider ${surf.muted}">
+                2. Press Start When You're Ready to Walk or Jog
+              </span>
+              <div class="grid grid-cols-2 gap-2.5">
+                <button
+                  onclick="startStepSession()"
+                  class="btn-tactile py-3 px-4 rounded-2xl bg-malachite text-warmcream font-extrabold text-xs sm:text-sm shadow-md shadow-malachite/20"
+                >
+                  ${s.sessionActive ? 'Restart Session (0)' : 'Start Session'}
+                </button>
+                <button
+                  onclick="finishStepSession()"
+                  ${!s.sessionActive ? 'disabled' : ''}
+                  class="btn-tactile py-3 px-4 rounded-2xl font-extrabold text-xs sm:text-sm ${
+                    s.sessionActive
+                      ? 'bg-lagoon text-white shadow-md shadow-lagoon/25'
+                      : 'opacity-40 cursor-not-allowed border border-current/20'
+                  }"
+                >
+                  Save Session
+                </button>
+              </div>
+            </div>
+
+            <!-- Quick Manual Step Tap Buttons -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <span class="text-xs font-bold ${surf.muted}">Quick manual tap:</span>
+              <div class="flex items-center gap-2">
+                <button
+                  onclick="addManualSteps(1)"
+                  class="btn-tactile px-3 py-1.5 rounded-xl border border-current/20 text-xs font-extrabold ${surf.subCard}"
+                >
+                  +1 Step
+                </button>
+                <button
+                  onclick="addManualSteps(25)"
+                  class="btn-tactile px-3 py-1.5 rounded-xl border border-current/20 text-xs font-extrabold ${surf.subCard}"
+                >
+                  +25 Steps
+                </button>
+                <button
+                  onclick="addManualSteps(100)"
+                  class="btn-tactile px-3 py-1.5 rounded-xl bg-marigold/20 text-malachite border border-marigold/40 text-xs font-extrabold"
+                >
+                  +100 Steps
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Sessions -->
+          <div class="rounded-3xl border p-5 ${surf.card}">
+            <h3 class="font-script text-lg mb-2.5">Saved Walk &amp; Jog Sessions</h3>
+            <div class="space-y-2">
+              ${sessionsHtml}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderJourneySection(surf) {
+      const todayIdx = getTodayDayIndex();
+      const selectedIdx = state.journey.selectedDayIndex;
+
+      // Mood Selector
+      const moodButtonsHtml = CUTE_MOODS.map((m) => {
+        const active = state.mood === m.id;
+        return `
+          <button
+            onclick="setMood('${m.id}')"
+            class="btn-tactile px-3 py-2 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 ${
+              active
+                ? 'bg-marigold text-malachite border-marigold shadow-sm'
+                : `${surf.subCard}`
+            }"
+          >
+            <span>${m.emoji}</span>
+            <span>${m.label}</span>
+          </button>
+        `;
+      }).join('');
+
+      // Day Header Buttons
+      const dayColsHtml = DAYS_OF_WEEK.map((dayName, idx) => {
+        const isToday = idx === todayIdx;
+        const isSelected = idx === selectedIdx;
+        return `
+          <button
+            onclick="selectJourneyDay(${idx})"
+            class="btn-tactile py-2 px-1 rounded-2xl text-center border flex flex-col items-center gap-0.5 ${
+              isSelected
+                ? 'bg-marigold text-malachite border-marigold shadow-sm'
+                : isToday
+                  ? 'border-lagoon/50 bg-lagoon/10 font-extrabold'
+                  : `${surf.subCard}`
+            }"
+          >
+            <span class="text-[11px] font-extrabold">${dayName}</span>
+            <span class="text-[9px] font-bold opacity-80">${isToday ? 'Today' : 'Locked'}</span>
+          </button>
+        `;
+      }).join('');
+
+      // Habit Rows (Mon - Sun; only Today is toggleable)
+      const rowsHtml = HABIT_ROWS.map((habit) => {
+        const cellsHtml = DAYS_OF_WEEK.map((_, dayIdx) => {
+          const done = Boolean(state.journey.habits[habit.key] && state.journey.habits[habit.key][dayIdx]);
+          const isToday = dayIdx === todayIdx;
+          return `
+            <button
+              onclick="toggleJourneyHabit('${habit.key}', ${dayIdx})"
+              title="${isToday ? `Toggle ${habit.label} for Today` : 'Only Today can be edited'}"
+              class="btn-tactile h-9 rounded-xl border flex items-center justify-center text-xs font-extrabold ${
+                done
+                  ? 'bg-lagoon text-white border-lagoon shadow-sm'
+                  : isToday
+                    ? `${surf.subCard} border-lagoon/40 hover:border-lagoon`
+                    : `${surf.subCard} opacity-55 cursor-not-allowed`
+              }"
+            >
+              ${done ? '✓' : isToday ? '+' : '·'}
+            </button>
+          `;
+        }).join('');
+
+        return `
+          <div class="grid grid-cols-8 items-center gap-1.5">
+            <div class="col-span-1 text-xs font-extrabold truncate pr-1" title="${habit.label}">
+              ${habit.emoji} <span class="hidden sm:inline">${habit.label.split(' ')[0]}</span>
+            </div>
+            <div class="col-span-7 grid grid-cols-7 gap-1.5">
+              ${cellsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const completedCount = Object.values(state.journey.habits).reduce((sum, arr) => {
+        return sum + arr.filter(Boolean).length;
+      }, 0);
+
+      return `
+        <section class="space-y-4">
+          <!-- Daily Vibe Check-In -->
+          <div class="rounded-3xl border p-5 ${surf.card}">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="font-script text-xl sm:text-2xl">Daily Vibe &amp; Journey</h2>
+                <p class="text-xs sm:text-sm ${surf.muted}">
+                  How are you feeling today? Only <strong>Today (${DAYS_OF_WEEK[todayIdx]})</strong> is unlocked for editing.
+                </p>
+              </div>
+              <button
+                onclick="resetWeeklyJourney()"
+                class="btn-tactile px-3 py-1.5 rounded-xl border border-current/20 text-xs font-extrabold ${surf.subCard}"
+              >
+                Reset Week
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              ${moodButtonsHtml}
+            </div>
+          </div>
+
+          <!-- Weekly Habit Grid -->
+          <div class="rounded-3xl border p-5 sm:p-6 space-y-3 ${surf.card}">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider ${surf.muted}">
+                Weekly Habit Grid (${completedCount} / 28)
+              </span>
+              <span class="text-xs font-bold text-lagoon">
+                Viewing ${DAYS_OF_WEEK[selectedIdx]}${selectedIdx === todayIdx ? ' (Editable)' : ' (Read-Only)'}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-8 items-center gap-1.5">
+              <div class="col-span-1 text-[10px] font-extrabold uppercase ${surf.muted}">Habit</div>
+              <div class="col-span-7 grid grid-cols-7 gap-1.5">
+                ${dayColsHtml}
+              </div>
+            </div>
+
+            <div class="space-y-2 pt-1">
+              ${rowsHtml}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderFloatingBottomNav() {
+      const tabs = [
+        { key: 'timer', label: 'Timer', emoji: '⏱️' },
+        { key: 'plate', label: 'Plate', emoji: '🥗' },
+        { key: 'steps', label: 'Steps', emoji: '👟' },
+        { key: 'journey', label: 'Journey', emoji: '🌷' },
+      ];
+
+      const itemsHtml = tabs
+        .map((t) => {
+          const isActive = state.activeTab === t.key;
+          return `
+            <button
+              onclick="setActiveTab('${t.key}')"
+              class="btn-tactile flex-1 py-2 px-2 sm:px-3 rounded-full flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold transition ${
+                isActive
+                  ? 'bg-marigold text-malachite shadow-md'
+                  : 'text-warmcream/85 hover:text-warmcream hover:bg-white/10'
+              }"
+            >
+              <span>${t.emoji}</span>
+              <span>${t.label}</span>
+            </button>
+          `;
+        })
+        .join('');
+
+      const containerPosClass =
+        state.viewMode === 'mobile'
+          ? 'fixed bottom-4 left-1/2 -translate-x-1/2 w-[94vw] max-w-[410px] z-40'
+          : 'fixed bottom-5 left-1/2 -translate-x-1/2 w-[92vw] max-w-[540px] z-40';
+
+      return `
+        <nav class="${containerPosClass}" aria-label="Bottom Navigation">
+          <div class="rounded-full bg-malachite/95 backdrop-blur-md border border-bubblegum/35 p-1.5 shadow-2xl flex items-center justify-between gap-1">
+            ${itemsHtml}
+          </div>
+        </nav>
+      `;
+    }
+
+    // =========================================================================
+    // 9. MAIN APP RENDERER
+    // =========================================================================
+    function renderApp() {
+      const root = document.getElementById('app');
+      if (!root) return;
+
+      const surf = getSurfaceClasses();
+      const isMobileFrame = state.viewMode === 'mobile';
+
+      let sectionHtml = '';
+      if (state.activeTab === 'timer') sectionHtml = renderTimerSection(surf);
+      else if (state.activeTab === 'plate') sectionHtml = renderPlateSection(surf);
+      else if (state.activeTab === 'journey') sectionHtml = renderJourneySection(surf);
+      else sectionHtml = renderStepsSection(surf);
+
+      const frameClasses = isMobileFrame
+        ? 'w-full max-w-[430px] mx-auto rounded-[2rem] border-2 border-malachite/15 p-3.5 sm:p-4 shadow-xl'
+        : 'w-full max-w-4xl mx-auto rounded-3xl border border-malachite/15 p-4 sm:p-6 shadow-md';
+
+      root.innerHTML = `
+        <div class="min-h-screen flex flex-col pb-24 ${surf.page}">
+          <!-- Top Header -->
+          <header class="sticky top-0 z-30 border-b border-current/10 backdrop-blur-md ${
+            state.themeMode === 'cozy' ? 'bg-deepmalachite/90' : 'bg-warmcream/90'
+          }">
+            <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <!-- Brand Logo & Tagline -->
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-marigold via-coral to-lagoon p-0.5 shadow-md shrink-0 float-cute">
+                  <div class="w-full h-full rounded-[14px] bg-malachite flex items-center justify-center text-lg">
+                    🌴
+                  </div>
+                </div>
+                <div>
+                  <h1 class="font-script text-xl sm:text-2xl leading-none text-malachite dark:text-warmcream">Laya &amp; Lagsik</h1>
+                  <p class="text-[11px] sm:text-xs font-semibold opacity-75 mt-0.5">
+                    Malaya sa pressure, lagsik sa matag adlaw.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Viewport & Theme Controls -->
+              <div class="flex items-center gap-1.5">
+                <button
+                  onclick="setViewMode('mobile')"
+                  class="btn-tactile px-2.5 py-1.5 rounded-xl text-xs font-extrabold border ${
+                    isMobileFrame
+                      ? 'bg-marigold text-malachite border-marigold'
+                      : 'border-current/15 opacity-75 hover:opacity-100'
+                  }"
+                >
+                  📱 Mobile
+                </button>
+                <button
+                  onclick="setViewMode('desktop')"
+                  class="btn-tactile px-2.5 py-1.5 rounded-xl text-xs font-extrabold border ${
+                    !isMobileFrame
+                      ? 'bg-marigold text-malachite border-marigold'
+                      : 'border-current/15 opacity-75 hover:opacity-100'
+                  }"
+                >
+                  💻 Desktop
+                </button>
+                <button
+                  onclick="toggleThemeMode()"
+                  class="btn-tactile px-2.5 py-1.5 rounded-xl text-xs font-extrabold border border-current/15 ${surf.subCard}"
+                  title="Toggle Theme"
+                >
+                  ${state.themeMode === 'sunny' ? '🌙' : '☀️'}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <!-- Main Solo Section Container -->
+          <main class="flex-1 px-3 sm:px-4 pt-4">
+            <div class="${frameClasses} ${state.themeMode === 'cozy' ? 'bg-malachite/40' : 'bg-sand/45'}">
+              ${sectionHtml}
+            </div>
+          </main>
+
+          <!-- Floating Bottom Navigation Dock -->
+          ${renderFloatingBottomNav()}
+
+          <!-- Toast Notification Slot -->
+          <div id="toast-slot"></div>
+        </div>
+      `;
+
+      renderToastOnly();
+    }
+
+    // =========================================================================
+    // 10. INITIALIZATION
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      try {
+        syncTodayHabits();
+        saveState();
+        renderApp();
+      } catch (err) {
+        const root = document.getElementById('app');
+        if (root) {
+          root.innerHTML = `
+            <div class="p-6 max-w-md mx-auto text-center space-y-2">
+              <h2 class="font-script text-xl text-malachite">Oops! Little Hiccup</h2>
+              <p class="text-sm opacity-80">Please refresh the page to reload Laya &amp; Lagsik.</p>
+            </div>
+          `;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
