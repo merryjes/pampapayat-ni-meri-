@@ -566,6 +566,7 @@ namespace LayaLagsik
               <div class="rounded-2xl bg-sand/70 p-3">
                 <div class="text-xs font-bold opacity-70">Today's Steps</div>
                 <div class="font-script text-3xl">${snap.dailySteps.toLocaleString()}</div>
+                <div class="text-[11px] font-bold text-lagoon mt-0.5">${snap.estimatedKm} km</div>
               </div>
               <div class="rounded-2xl bg-sand/70 p-3">
                 <div class="text-xs font-bold opacity-70">Session (${snap.sessionActive ? 'ACTIVE' : 'STANDBY'})</div>
@@ -622,7 +623,7 @@ namespace LayaLagsik
       }
     }
 
-    <comment-tag id="2">boot();</comment-tag id="2" text="Change #2 (Great for Commit 2): Show estimated distance in kilometers (snap.estimatedKm) right under Today's Steps in the Steps tab so users see how far their walk or jog reached." type="suggestion">
+    boot();
   </script>
 </body>
 </html>
