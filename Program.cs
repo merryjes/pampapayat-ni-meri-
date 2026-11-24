@@ -57,6 +57,7 @@ namespace LayaLagsik
         public List<StepSessionRecord> Sessions { get; set; } = new List<StepSessionRecord>();
         public int TodayDayIndex { get; set; }
         public Dictionary<string, bool[]> Habits { get; set; } = new Dictionary<string, bool[]>();
+        public double EstimatedKm { get; set; }
         public string StatusMessage { get; set; } = "Connected to C#!";
     }
 
@@ -154,6 +155,7 @@ namespace LayaLagsik
                     Sessions = Sessions.Take(6).ToList(),
                     TodayDayIndex = GetTodayDayIndex(),
                     Habits = Habits.ToDictionary(k => k.Key, v => (bool[])v.Value.Clone()),
+                    EstimatedKm = Math.Round(DailySteps * 0.00075, 2),
                     StatusMessage = LastMessage
                 };
             }
@@ -620,7 +622,7 @@ namespace LayaLagsik
       }
     }
 
-    boot();
+    <comment-tag id="2">boot();</comment-tag id="2" text="Change #2 (Great for Commit 2): Show estimated distance in kilometers (snap.estimatedKm) right under Today's Steps in the Steps tab so users see how far their walk or jog reached." type="suggestion">
   </script>
 </body>
 </html>
